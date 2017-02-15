@@ -15,12 +15,19 @@
  */
 package org.springframework.samples.petclinic.owner;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.File;
 import java.util.Collection;
 import java.util.Map;
+import java.awt.Color;
 
+import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -30,6 +37,21 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.ModelAndView;
+
+import org.springframework.samples.petclinic.pdf.LineBox;
+
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+
+import rst.pdfbox.layout.elements.Document;
+import rst.pdfbox.layout.elements.ImageElement;
+import rst.pdfbox.layout.elements.Paragraph;
+import rst.pdfbox.layout.elements.render.VerticalLayoutHint;
+import rst.pdfbox.layout.text.Alignment;
+import rst.pdfbox.layout.text.BaseFont;
+import rst.pdfbox.layout.text.Indent;
+import rst.pdfbox.layout.text.NewLine;
+import rst.pdfbox.layout.text.SpaceUnit;
+
 
 /**
  * @author Juergen Hoeller
@@ -107,6 +129,59 @@ class OwnerController {
         Owner owner = this.owners.findById(ownerId);
         model.addAttribute(owner);
         return VIEWS_OWNER_CREATE_OR_UPDATE_FORM;
+    }
+
+    @RequestMapping(value = "/owners/{ownerId}/export", method = RequestMethod.GET)
+    public void exportOwnerPDF(@PathVariable("ownerId") int ownerId, HttpServletResponse response) {
+        try {
+            Owner owner = this.owners.findById(ownerId);
+            ByteArrayOutputStream output = createPDF(owner);
+            response.addHeader("Content-Type", "application/force-download");
+            response.addHeader("Content-Disposition", "attachment; filename=\"owner_export.pdf\"");
+            response.getOutputStream().write(output.toByteArray());
+        }
+        catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    public ByteArrayOutputStream createPDF(Owner owner) throws IOException {
+
+        Document document = new Document(40, 60, 80, 60);
+
+        Paragraph paragraph = new Paragraph();
+        paragraph.add(new Indent("Name", 100, SpaceUnit.pt, 11, PDType1Font.HELVETICA));
+        paragraph.addMarkup(owner.getFirstName() + " " + owner.getLastName() + "\n", 11, BaseFont.Times);
+
+        paragraph.add(new Indent("Address", 100, SpaceUnit.pt, 11, PDType1Font.HELVETICA));
+        paragraph.addMarkup(owner.getAddress() + "\n", 11, BaseFont.Times);
+        
+        paragraph.add(new Indent("City", 100, SpaceUnit.pt, 11, PDType1Font.HELVETICA));
+        paragraph.addMarkup(owner.getCity() + "\n", 11, BaseFont.Times);
+
+        paragraph.add(new NewLine(12));
+        document.add(paragraph);
+
+        paragraph = new Paragraph();
+        LineBox lbox = new LineBox(paragraph, 500, 8);
+        lbox.setMargins(10, 10, 20, 5);
+        lbox.setBackgroundColor(Color.black);
+        paragraph.add(new NewLine(12));
+        document.add(lbox);
+
+        //Resource resource = new ClassPathResource("spring-pivotal-logo.png");
+        ImageElement image = new ImageElement(
+            this.getClass().getResourceAsStream(
+                "/static/resources/images/spring-pivotal-logo.png"));
+        //ImageElement image = new ImageElement(springlogo.getInputStream());
+        if (image != null) {
+            document.add(image, new VerticalLayoutHint(Alignment.Center, 0, 0,
+                20, 0, false));
+        }
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        document.save(output);
+        return output;
     }
 
     @RequestMapping(value = "/owners/{ownerId}/edit", method = RequestMethod.POST)
